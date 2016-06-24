@@ -11,36 +11,58 @@
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/4.3.0/min/dropzone.min.css">
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/4.3.0/min/dropzone.min.js"></script>
 
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.6.1/css/bootstrap-datepicker.min.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.6.1/js/bootstrap-datepicker.min.js"></script>
+
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 </head>
 <body>
 
 	<div class="container">
-		<form method="post" action=/newArticle/<%= id %> enctype="multipart/form-data" id="article-info">
+		<form method="post" action=/editor/newArticle/<%= id %> enctype="multipart/form-data" id="article-info">
 			<div class="form-group">
-				<label for="article-name">Article Name</label>
-				<input type="text" class="form-control" id="article-name" placeholder="Article Name" name="article[title]">
+				<label for="article-title">Title</label>
+				<input type="text" class="form-control" id="article-title" placeholder="Article Title" name="article[title]">
 			</div>
 			<div class="form-group">
 				<label for="article-author">Author</label>
 				<input type="text" class="form-control" id="article-author" placeholder="Author" name="article[author]">
 			</div>
 			<div class="form-group">
-				<label for="article-category">Author</label>
+				<label for="article-category">Category</label>
 				<input type="text" class="form-control" id="article-category" placeholder="Category" name="article[category]">
 			</div>
+			<div class="form-group">
+				<label for="article-date">Date Published</label>
+				<input type="text" class="form-control" id="article-date" placeholder="Date Published" name="article[date]">
+			</div>
 		</form>
-		<form id="upload-widget" method="post" action=/upload/<%= id %> class="dropzone"></form><br>
+		<form id="upload-widget" method="post" action=/editor/upload/<%=id%> class="dropzone"></form><br>
 		<button class="btn btn-default pull-right" id="submit">Submit</button>
 	</div>
 
     <script>
 
-    Dropzone.options.uploadWidget = {};
+    var title = <%- JSON.stringify(title) %>;
+    var author = <%- JSON.stringify(author) %>;
+    var category = <%- JSON.stringify(category) %>;
+    $("#article-title").val(title);
+    $("#article-author").val(author);
+    $("#article-category").val(category);
+
+    $('#article-date').datepicker({
+    format: "MM dd, yyyy",
+    todayBtn: "linked",
+    todayHighlight: true
+});
+
+    Dropzone.autoDiscover = false;
+    var myDropzone = new Dropzone("#upload-widget", { autoProcessQueue: false });
 
     $( "#submit" ).click(function() { 
-    	$( "#article-info" ).submit(); 
+    	myDropzone.processQueue();
+    	$( "#article-info" ).submit();
     }); 
 
     </script>

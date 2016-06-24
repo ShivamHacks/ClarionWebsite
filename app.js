@@ -41,7 +41,11 @@ AWS.config.loadFromPath('./config.json').aws;
 var s3 = new AWS.S3();
 var db = new AWS.DynamoDB();
 
-router.get('/article/:title', function (req, res) {
+
+// Router functions -------------------------------------------
+
+// Public functions
+app.get('/article/:title', function (req, res) {
   var title = req.params.title;
   queryArticle(title, function(data) {
     if (_.isEmpty(data)) {
@@ -52,10 +56,7 @@ router.get('/article/:title', function (req, res) {
         if (_.isEmpty(data)) {
           res.send("ERROR, invalid article id");
         } else {
-          console.log(data);
-          var title = data.Item.title.S;
-          var author = data.Item.author.S;
-          var category = data.Items[0].title.S;
+          var article = extractData(data.Item);
 
           var params = { Bucket: txtStorage, Key: id };
           s3.getObject(params, function(err, data) {
@@ -68,9 +69,9 @@ router.get('/article/:title', function (req, res) {
               var body = buffer.toString('utf-8');
 
               res.render('article', {
-                title: title,
-                author: author,
-                body: body
+                article: article,
+                body: body,
+                urlBase: "localhost:3000"
               });
             }
           });
@@ -80,10 +81,105 @@ router.get('/article/:title', function (req, res) {
   });
 });
 
-router.get('/newArticle', function (req, res) {
-  var id = shortid.generate();
-  res.render('add_article', { id: id });
+// Editor Functions
+
+// there will be a preset list of approved editors in the form of a json file.
+var Cookies = require('cookies');
+
+app.use('/editor', function(req, res, next) {
+  console.log('Request URL:', req.originalUrl);
+  var cookies = new Cookies(req, res);
+  var approved = require('./approved.json').approved;
+  var user = { name: cookies.get('uname'), pass: cookies.get('upass') };
+  var found = _.find(approved, function (u) { 
+    return u.name == user.name && u.pass == user.pass; 
+  });
+  if (found) next();
+  else res.send("NOT AUTHORIZED");
 });
+app.get('/editorlogin', function (req,res,next) {
+  res.render('login', {}); // TODO, redirect if logged in
+});
+app.post('/editorlogin', multipartMiddleware, function( req, res, next ) {
+  var user = req.body;
+  var approved = require('./approved.json').approved;
+  var cookies = new Cookies(req, res);
+  var found = _.find(approved, function (u) { 
+    return u.name == user.name && u.pass == user.pass; 
+  });
+  if (found) {
+    cookies.set('uname', user.name);
+    cookies.set('upass', user.pass);
+    res.status(200).send("Logged In");
+  } else {
+    res.status(200).send("You are not an approved editor");
+  }
+});
+app.get('/editor/logout', function( req, res, next ) {
+  var cookies = new Cookies(req, res);
+  cookies.set('uname');
+  cookies.set('upass');
+  res.render('login', {});
+});
+app.get('/editor/newArticle', function (req, res) {
+  var id = shortid.generate();
+  res.render('add_article', { id: id, title: '', author: '', category: '' });
+});
+app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
+  var article = req.body.article;
+  console.log(article);
+  var id = req.params.id;
+  var empty = noNullVals(article);
+  if (empty.length == 0) {
+    putArticle(id, article);
+  }
+  res.render('index', { title: "LOL" });
+});
+app.post('/editor/upload/:id', upload.single('file'), function( req, res, next ) {
+  var id = req.params.id;
+  console.log("FILE UPLOAD: " + id);
+  var name = req.file.originalname;
+  var path = req.file.path;
+  if (req.file.mimetype == "text/plain") {
+    parseDoc(req.file.path, id, function(data) {
+      s3TxtUpload(id, path, data, deleteFile);
+    });
+  } else if (req.file.mimetype.indexOf("image/") > -1) {
+    s3ImgUpload(name, path, id, deleteFile);
+  }
+  res.status( 200 ).send("ALL GOOD DAWG");
+});
+app.get('/editor/editArticle/:id', function (req, res) {
+  // unused images are NOT deleted
+  // text resource is overwritten
+  var id = req.params.id;
+  getArticle(id, function(data) {
+    if (_.isEmpty(data)) {
+      res.send("Unable to find data");
+    } else {
+      res.render('add_article', { 
+        id: id,
+        title: data.Item.title.S,
+        author: data.Item.author.S,
+        category: data.Item.author.S
+      });
+    }
+  })
+});
+app.get('/editor/directory', function (req, res) {
+  scanArticles(function(data) {
+    if (_.isEmpty(data)) {
+      res.send("Unable to find data");
+    } else {
+      res.render('directory', { 
+        urlBase: "http://localhost:3000",
+        articles: data.Items
+      });
+    }
+  });
+});
+// Router functions -------------------------------------------
+
 
 // DB functions -------------------------------------------
 var dbPutParams = function(id, article) {
@@ -93,6 +189,7 @@ var dbPutParams = function(id, article) {
       title: { S: article.title },
       author: { S: article.author },
       category: { S: article.category },
+      date: { S: article.date },
       urlTitle: { S: article.title.replace(/\s+/g, '-').toLowerCase() }
     },
     TableName: articlesTable
@@ -116,7 +213,7 @@ var dbQueryParams = function(title) {
       }
     }
   };
-}
+};
 function putArticle(id, article) {
   var params = dbPutParams(id, article);
   db.putItem(params, function(err, data) {
@@ -134,6 +231,16 @@ function getArticle(id, callback) {
 function queryArticle(title, callback) {
   var params = dbQueryParams(title);
   db.query(params, function(err, data) {
+    if (err) { console.log(err); } 
+    else { callback(data); }
+  });
+}
+function scanArticles(callback) {
+  var params = {
+    TableName: articlesTable,
+    ProjectionExpression: "id, title, author, category, urlTitle"
+  };
+  db.scan(params, function(err, data) {
     if (err) { console.log(err); } 
     else { callback(data); }
   });
@@ -202,34 +309,16 @@ function noNullVals(obj) {
   }
   return empty;
 }
+
+
+function extractData(obj) {
+  var article = {};
+  for (var key in obj) {
+    article[key] = obj[key].S;
+  }
+  return article;
+}
 // Helper functions -------------------------------------------
-
-
-// Router functions -------------------------------------------
-router.post('/newArticle/:id', multipartMiddleware, function (req, res) {
-  var article = req.body.article;
-  console.log(article);
-  var id = req.params.id;
-  var empty = noNullVals(article);
-  if (empty.length == 0) {
-    putArticle(id, article);
-  }
-  res.render('index', { title: "LOL" });
-});
-
-router.post( '/upload/:id', upload.single('file'), function( req, res, next ) {
-  var id = req.params.id;
-  var name = req.file.originalname;
-  var path = req.file.path;
-  if (req.file.mimetype == "text/plain") {
-    parseDoc(req.file.path, id, function(data) {
-      s3TxtUpload(id, path, data, deleteFile);
-    });
-  } else if (req.file.mimetype.indexOf("image/") > -1) {
-    s3ImgUpload(name, path, id, deleteFile);
-  }
-  res.status( 200 ).send("ALL GOOD DAWG");
-});
 
 
 // Parsing functions -------------------------------------------
@@ -240,7 +329,8 @@ var parser = new Parser();
 
 parser.addRule(/\[(.*?)\]/, function(tag) {
   var src = "https://s3.amazonaws.com/clarionimgs/" + tag.replace(/[[\]]/g,'');
-  return "</span><img class='img' src='" + src + "'><span class='txt'>";
+  console.log(tag);
+  return "</span><img class='img-responsive' src='" + src + "'><span class='txt'>";
 });
 parser.addRule(/\<b(.*?)\b>/, function(tag) {
   return "<b>" + tag.replace(/<b|b>/g,'').trim() + "</b>";
@@ -260,7 +350,7 @@ parser.addRule(/\{(.*)}/, function(tag) {
 
 function parseDoc(fileLoc, id, callback) {
   var lr = new LineByLineReader(fileLoc);
-  var html = "<span class='txt'>";
+  var html = "<div class='main'><span class='txt'>";
   lr.on('line', function (line) {
     if (line == "")
       html += "<br>";
@@ -269,7 +359,7 @@ function parseDoc(fileLoc, id, callback) {
     html += parser.render(withId);
   });
   lr.on('end', function () {
-    html += "</span>"
+    html += "</span></div>"
     callback(html);
   });
 }
@@ -278,7 +368,8 @@ function parseDoc(fileLoc, id, callback) {
 
 /* Parser:
 
-  image: [image.type]
+  image: [image.type] !!! no spaces
+  // accepts all image types. make sure if img is jpeg, type jpg in editor.
   bold: <b text in bold b>
   italics: <i text in italics i>
   underline: <u text in underline u>

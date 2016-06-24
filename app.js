@@ -19,8 +19,11 @@ router.get('/', function (req, res) {
   res.render('index', { title: "LOL" });
 });
 
-var ids = [];
-//var articles = [];
+var txtStorage = 'clarionarticles';
+var imgStorage = 'clarionimgs';
+var articlesTable = 'articlesTable';
+
+// Article add
 
 var multipart = require('connect-multiparty');
 var multipartMiddleware = multipart();
@@ -32,82 +35,168 @@ var shortid = require('shortid');
 var fs = require('fs');
 var _ = require('underscore');
 
+var AWS = require('aws-sdk');
+AWS.config.loadFromPath('./config.json').aws;
+var s3 = new AWS.S3();
+var db = new AWS.DynamoDB();
+
 try {
   fs.mkdirSync('articles');
 } catch(e) {
   if ( e.code != 'EEXIST' ) throw e;
 }
+try {
+  fs.mkdirSync('temp');
+} catch(e) {
+  if ( e.code != 'EEXIST' ) throw e;
+}
+
+router.get('/articles/:id', function (req, res) {
+  var id = req.params.id;
+  var params = { Bucket: txtStorage, Key: id };
+  s3.getObject(params, function(err, data) {
+    if (err) { 
+      console.log(err, err.stack);
+      res.send("ERROR");
+    }
+    else {
+      var buffer = new Buffer(data.Body);
+      var body = buffer.toString('utf-8');
+
+      getArticle(id, function(data) {
+        if (_.isEmpty(data)) {
+          res.send("ERROR");
+        } else {
+          res.render('article', {
+            title: data.Item.title.S,
+            author: data.Item.author.S,
+            body: body
+          });
+        }
+      });
+    }
+  });
+});
 
 router.get('/newArticle', function (req, res) {
   var id = shortid.generate();
-  var fileName = './articles/' + id + '.json';
-  fs.writeFile(fileName, JSON.stringify({ 
-    id: id,
-    imgs: []
-  }), function(err) {
-    if (err) console.log(err);
-    else console.log("Created article json: " + id);
-  });
   res.render('add_article', { id: id });
 });
 
+var dbPutParams = function(id, title, author) {
+  return {
+    Item: {
+      id: { S: id },
+      title: { S: title },
+      author: { S: author }
+    },
+    TableName: articlesTable
+  };
+};
+var dbGetParams = function(id) {
+  return {
+    AttributesToGet: [ "title", "author" ],
+    TableName : articlesTable,
+    Key : { id : { S : id } }
+  }
+}
+function putArticle(id, title, author) {
+  var params = dbPutParams(id, title, author);
+  db.putItem(params, function(err, data) {
+    if (err) { console.log(err); }
+    else {}
+  });
+}
+function getArticle(id, callback) {
+  var params = dbGetParams(id);
+  db.getItem(params, function(err, data) {
+    if (err) { console.log(err); } 
+    else { callback(data); }
+  });
+}
+// TODO, add date, category, etc.
+
 router.post('/newArticle/:id', multipartMiddleware, function (req, res) {
-  var articleData = req.body.article;
+  var article = req.body.article;
   var id = req.params.id;
-  if (articleData != null && articleData.title != "" && articleData.author != "") {
-    var fileName = './articles/' + id + '.json';
-    var file = require(fileName);
-    file.title = articleData.title;
-    file.author = articleData.author;
-    fs.writeFile(fileName, JSON.stringify(file), function (err) {
-      if (err) console.log(err);
-      else console.log("Saved article data of: " + id);
-    });
-    // here, upload images to s3 and change img locations, and save article json to dynamodb.
+  if (article != null && article.title != "" && article.author != "") {
+    putArticle(id, article.title, article.author);
   }
   res.render('index', { title: "LOL" });
 });
+
+// PERFECT (except for error handling) from here down
 
 router.post( '/upload/:id', upload.single('file'), function( req, res, next ) {
   var id = req.params.id;
   var name = req.file.originalname;
   var path = req.file.path;
   if (req.file.mimetype == "text/plain") {
-    parseDoc(req.file.path, function(data) {
-      var fileName = './articles/' + id + '.json';
-      var file = require(fileName);
-      file.html = data;
-      fs.writeFile(fileName, JSON.stringify(file), function (err) {
-        if (err) console.log(err);
-        else console.log("Saved html of: " + id);
-      });
+    parseDoc(req.file.path, id, function(data) {
+      s3TxtUpload(id, path, data, deleteFile);
     });
   } else if (req.file.mimetype.indexOf("image/") > -1) {
-    var fileName = './articles/' + id + '.json';
-    var file = require(fileName);
-    file.imgs.push({
-      name: name,
-      path: path
-    })
-    fs.writeFile(fileName, JSON.stringify(file), function (err) {
-      if (err) console.log(err);
-      else console.log("Saved image of: " + id);
-    });
+    s3ImgUpload(name, path, id, deleteFile);
   }
   res.status( 200 ).send("ALL GOOD DAWG");
 });
 
+function deleteFile(yes, path) {
+  if (yes) {
+    fs.unlink(path, function(err) {
+      if (err) console.log(err);
+    });  
+  }
+}
 
+function s3ImgUpload(name, path, id, callback) {
+  var imagePath = path;
+  var imageName = id + "-" + name;
+  var img = fs.readFileSync(imagePath);
+  var params = {
+    Bucket: imgStorage, 
+    Key: imageName, 
+    Body: img,
+    ContentType: img.mimetype,
+    ACL: 'public-read'
+  };
+  s3.upload(params, function(err, data) {
+    if (err) { 
+      console.log(err);
+      callback(false, path);
+    }
+    else { callback(true, path); }
+  });
+}
+
+function s3TxtUpload(id, path, data, callback) {
+  fs.writeFileSync(path, data);
+  var txt = fs.readFileSync(path);
+  var params = {
+    Bucket: txtStorage, 
+    Key: id, 
+    Body: txt,
+    ContentType: txt.mimetype,
+    ACL: 'public-read'
+  };
+  s3.upload(params, function(err, data) {
+    if (err) { 
+      console.log(err);
+      callback(false, path);
+    }
+    else { callback(true, path); }
+  });
+}
 
 // Parsing stuff
-
 
 var LineByLineReader = require('line-by-line');
 var Parser = require("simple-text-parser");
 var parser = new Parser();
 
 parser.addRule(/\[(.*?)\]/, function(tag) {
-  return "</span><img class='img' src='" + tag.replace(/[[\]]/g,'') + "'><span class='txt'>";
+  var src = "https://s3.amazonaws.com/clarionimgs/" + tag.replace(/[[\]]/g,'');
+  return "</span><img class='img' src='" + src + "'><span class='txt'>";
 });
 parser.addRule(/\<b(.*?)\b>/, function(tag) {
   return "<b>" + tag.replace(/<b|b>/g,'').trim() + "</b>";
@@ -123,22 +212,20 @@ parser.addRule(/\{(.*)}/, function(tag) {
   return "<a href='" + linkInfo[1].trim() + "' target='_blank'>" + linkInfo[0].trim() + "</a>";
 });
 
-function parseDoc(fileLoc, callback) {
+function parseDoc(fileLoc, id, callback) {
   var lr = new LineByLineReader(fileLoc);
   var html = "<span class='txt'>";
   lr.on('line', function (line) {
     if (line == "")
       html += "<br>";
     else
-      html += parser.render(line);
+      var withId = line.trim().replace(/\[/g,"[" + id + "-");
+    html += parser.render(withId);
   });
   lr.on('end', function () {
     html += "</span>"
     callback(html);
-    //console.log(html);
   });
-  //console.log(html);
-  //return html;
 }
 
 /* Parser:
@@ -154,6 +241,10 @@ function parseDoc(fileLoc, callback) {
   - no tabs in articles
   - no captions for images
 
+  TODO
+  - add article categories (news, etc)
+  - delete imgs from upload folder
+  - make better content management system. i.e edit articles and delete cloud objects
   */
 
 
@@ -178,6 +269,7 @@ function boRegex(line) {
 
 
 app.use(function(err, req, res, next) {
+  console.log(err);
   res.status(err.status || 500);
   res.send("ERROR");
 });

@@ -6,6 +6,7 @@
     "start": "node ./app"
   },
   "dependencies": {
+    "aws-sdk": "^2.4.1",
     "body-parser": "~1.13.2",
     "connect-multiparty": "^2.0.0",
     "debug": "~2.2.0",
@@ -15,6 +16,7 @@
     "multer": "^1.1.0",
     "shortid": "^2.2.6",
     "simple-text-parser": "^1.0.0",
+    "string_decoder": "^0.10.31",
     "underscore": "^1.8.3"
   }
 }

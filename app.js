@@ -22,6 +22,7 @@ router.get('/', function (req, res) {
 var txtStorage = 'clarionarticles';
 var imgStorage = 'clarionimgs';
 var articlesTable = 'articlesTable';
+var articlesIndex = 'urlTitle-index';
 
 // Article add
 
@@ -40,37 +41,38 @@ AWS.config.loadFromPath('./config.json').aws;
 var s3 = new AWS.S3();
 var db = new AWS.DynamoDB();
 
-try {
-  fs.mkdirSync('articles');
-} catch(e) {
-  if ( e.code != 'EEXIST' ) throw e;
-}
-try {
-  fs.mkdirSync('temp');
-} catch(e) {
-  if ( e.code != 'EEXIST' ) throw e;
-}
-
-router.get('/articles/:id', function (req, res) {
-  var id = req.params.id;
-  var params = { Bucket: txtStorage, Key: id };
-  s3.getObject(params, function(err, data) {
-    if (err) { 
-      console.log(err, err.stack);
-      res.send("ERROR");
-    }
-    else {
-      var buffer = new Buffer(data.Body);
-      var body = buffer.toString('utf-8');
-
+router.get('/article/:title', function (req, res) {
+  var title = req.params.title;
+  queryArticle(title, function(data) {
+    if (_.isEmpty(data)) {
+      res.send("ERROR, article not found, 404");
+    } else {
+      var id = data.Items[0].id.S;
       getArticle(id, function(data) {
         if (_.isEmpty(data)) {
-          res.send("ERROR");
+          res.send("ERROR, invalid article id");
         } else {
-          res.render('article', {
-            title: data.Item.title.S,
-            author: data.Item.author.S,
-            body: body
+          console.log(data);
+          var title = data.Item.title.S;
+          var author = data.Item.author.S;
+          var category = data.Items[0].title.S;
+
+          var params = { Bucket: txtStorage, Key: id };
+          s3.getObject(params, function(err, data) {
+            if (err) { 
+              console.log(err, err.stack);
+              res.send("ERROR, could not find text resource");
+            }
+            else {
+              var buffer = new Buffer(data.Body);
+              var body = buffer.toString('utf-8');
+
+              res.render('article', {
+                title: title,
+                author: author,
+                body: body
+              });
+            }
           });
         }
       });
@@ -83,25 +85,40 @@ router.get('/newArticle', function (req, res) {
   res.render('add_article', { id: id });
 });
 
-var dbPutParams = function(id, title, author) {
+// DB functions -------------------------------------------
+var dbPutParams = function(id, article) {
   return {
     Item: {
       id: { S: id },
-      title: { S: title },
-      author: { S: author }
+      title: { S: article.title },
+      author: { S: article.author },
+      category: { S: article.category },
+      urlTitle: { S: article.title.replace(/\s+/g, '-').toLowerCase() }
     },
     TableName: articlesTable
   };
 };
 var dbGetParams = function(id) {
   return {
-    AttributesToGet: [ "title", "author" ],
     TableName : articlesTable,
     Key : { id : { S : id } }
-  }
+  };
+};
+var dbQueryParams = function(title) {
+  return {
+    TableName: articlesTable,
+    IndexName: articlesIndex,
+    AttributesToGet: [ 'id' ],
+    KeyConditions: {
+      urlTitle: {
+        ComparisonOperator: 'EQ',
+        AttributeValueList: [ { S: title } ]
+      }
+    }
+  };
 }
-function putArticle(id, title, author) {
-  var params = dbPutParams(id, title, author);
+function putArticle(id, article) {
+  var params = dbPutParams(id, article);
   db.putItem(params, function(err, data) {
     if (err) { console.log(err); }
     else {}
@@ -114,41 +131,17 @@ function getArticle(id, callback) {
     else { callback(data); }
   });
 }
-// TODO, add date, category, etc.
-
-router.post('/newArticle/:id', multipartMiddleware, function (req, res) {
-  var article = req.body.article;
-  var id = req.params.id;
-  if (article != null && article.title != "" && article.author != "") {
-    putArticle(id, article.title, article.author);
-  }
-  res.render('index', { title: "LOL" });
-});
-
-// PERFECT (except for error handling) from here down
-
-router.post( '/upload/:id', upload.single('file'), function( req, res, next ) {
-  var id = req.params.id;
-  var name = req.file.originalname;
-  var path = req.file.path;
-  if (req.file.mimetype == "text/plain") {
-    parseDoc(req.file.path, id, function(data) {
-      s3TxtUpload(id, path, data, deleteFile);
-    });
-  } else if (req.file.mimetype.indexOf("image/") > -1) {
-    s3ImgUpload(name, path, id, deleteFile);
-  }
-  res.status( 200 ).send("ALL GOOD DAWG");
-});
-
-function deleteFile(yes, path) {
-  if (yes) {
-    fs.unlink(path, function(err) {
-      if (err) console.log(err);
-    });  
-  }
+function queryArticle(title, callback) {
+  var params = dbQueryParams(title);
+  db.query(params, function(err, data) {
+    if (err) { console.log(err); } 
+    else { callback(data); }
+  });
 }
+// DB functions -------------------------------------------
 
+
+// S3 functions -------------------------------------------
 function s3ImgUpload(name, path, id, callback) {
   var imagePath = path;
   var imageName = id + "-" + name;
@@ -187,8 +180,59 @@ function s3TxtUpload(id, path, data, callback) {
     else { callback(true, path); }
   });
 }
+// S3 functions -------------------------------------------
 
-// Parsing stuff
+
+// Helper functions -------------------------------------------
+function deleteFile(yes, path) {
+  if (yes) {
+    fs.unlink(path, function(err) {
+      if (err) console.log(err);
+    });  
+  }
+}
+
+function noNullVals(obj) {
+  var empty = [];
+  if (_.isEmpty(obj))
+    empty.push(null);
+  for (var key in obj) {
+    if (obj[key] == null || obj[key] == "")
+      empty.push(key);
+  }
+  return empty;
+}
+// Helper functions -------------------------------------------
+
+
+// Router functions -------------------------------------------
+router.post('/newArticle/:id', multipartMiddleware, function (req, res) {
+  var article = req.body.article;
+  console.log(article);
+  var id = req.params.id;
+  var empty = noNullVals(article);
+  if (empty.length == 0) {
+    putArticle(id, article);
+  }
+  res.render('index', { title: "LOL" });
+});
+
+router.post( '/upload/:id', upload.single('file'), function( req, res, next ) {
+  var id = req.params.id;
+  var name = req.file.originalname;
+  var path = req.file.path;
+  if (req.file.mimetype == "text/plain") {
+    parseDoc(req.file.path, id, function(data) {
+      s3TxtUpload(id, path, data, deleteFile);
+    });
+  } else if (req.file.mimetype.indexOf("image/") > -1) {
+    s3ImgUpload(name, path, id, deleteFile);
+  }
+  res.status( 200 ).send("ALL GOOD DAWG");
+});
+
+
+// Parsing functions -------------------------------------------
 
 var LineByLineReader = require('line-by-line');
 var Parser = require("simple-text-parser");
@@ -212,6 +256,8 @@ parser.addRule(/\{(.*)}/, function(tag) {
   return "<a href='" + linkInfo[1].trim() + "' target='_blank'>" + linkInfo[0].trim() + "</a>";
 });
 
+// possibly add new rule for paragraphs???
+
 function parseDoc(fileLoc, id, callback) {
   var lr = new LineByLineReader(fileLoc);
   var html = "<span class='txt'>";
@@ -227,6 +273,8 @@ function parseDoc(fileLoc, id, callback) {
     callback(html);
   });
 }
+
+// Parsing functions -------------------------------------------
 
 /* Parser:
 
@@ -245,6 +293,10 @@ function parseDoc(fileLoc, id, callback) {
   - add article categories (news, etc)
   - delete imgs from upload folder
   - make better content management system. i.e edit articles and delete cloud objects
+
+  - navbar & other styles
+  - search
+  - make look cool
   */
 
 
@@ -265,6 +317,13 @@ function boRegex(line) {
 // img width - max 100%, img height- max 50vh, make it a block, so it is a new line. and end paragraph there.
 // make html wrap b/c its all going to be text.
 // classes - img: .img, text: .txt
+
+// here, i get article by title. This is the main way to go
+  // maybe do some fancy stuff with the date and category, etc to make url look cool
+  // make sure to plan this out first!!!
+  // and when done, try to make it open source, but first show it to clarion peeps.
+  // worst comes to worst, i'll use it for my own blog
+  // open source this blog software b/c i essentially wrote my own language!!!
 
 
 

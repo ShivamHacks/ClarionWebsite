@@ -3,21 +3,23 @@
 <head>
 	<title>Add an article</title>
 
-	<script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+	<script src="/js/jquery.min.js"></script>
 
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
 	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
 
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/4.3.0/min/dropzone.min.css">
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/4.3.0/min/dropzone.min.js"></script>
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/4.3.0/min/dropzone.min.js"></script>
 
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.6.1/css/bootstrap-datepicker.min.css">
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.6.1/js/bootstrap-datepicker.min.js"></script>
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.6.1/js/bootstrap-datepicker.min.js"></script>
 
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 </head>
 <body>
+
+	<% include ./partials/nav %>
 
 	<div class="container">
 		<form method="post" action=/editor/newArticle/<%= id %> enctype="multipart/form-data" id="article-info">
@@ -42,30 +44,32 @@
 		<button class="btn btn-default pull-right" id="submit">Submit</button>
 	</div>
 
-    <script>
+	<% include ./partials/footer %>
 
-    var title = <%- JSON.stringify(title) %>;
-    var author = <%- JSON.stringify(author) %>;
-    var category = <%- JSON.stringify(category) %>;
-    $("#article-title").val(title);
-    $("#article-author").val(author);
-    $("#article-category").val(category);
+	<script>
 
-    $('#article-date').datepicker({
-    format: "MM dd, yyyy",
-    todayBtn: "linked",
-    todayHighlight: true
-});
+	var title = <%- JSON.stringify(title) %>;
+	var author = <%- JSON.stringify(author) %>;
+	var category = <%- JSON.stringify(category) %>;
+	$("#article-title").val(title);
+	$("#article-author").val(author);
+	$("#article-category").val(category);
 
-    Dropzone.autoDiscover = false;
-    var myDropzone = new Dropzone("#upload-widget", { autoProcessQueue: false });
+	$('#article-date').datepicker({
+		format: "MM dd, yyyy",
+		todayBtn: "linked",
+		todayHighlight: true
+	});
 
-    $( "#submit" ).click(function() { 
-    	myDropzone.processQueue();
-    	$( "#article-info" ).submit();
-    }); 
+	Dropzone.autoDiscover = false;
+	var myDropzone = new Dropzone("#upload-widget", { autoProcessQueue: false });
 
-    </script>
+	$( "#submit" ).click(function() { 
+		myDropzone.processQueue();
+		$( "#article-info" ).submit();
+	}); 
+
+	</script>
 
 
 </body>

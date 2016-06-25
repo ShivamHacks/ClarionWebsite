@@ -15,6 +15,7 @@
 				<th>Title</th>
 				<th>Author</th>
 				<th>Category</th>
+				<th>Date Published</th>
 				<th>View Link</th>
 				<th>Edit Link</th>
 				<!--<th>Delete Link</th>-->
@@ -26,6 +27,7 @@
 				<td><%= articles[i].title.S %></td>
 				<td><%= articles[i].author.S %></td>
 				<td><%= articles[i].category.S %></td>
+				<td><%= articles[i].datePublished.S %></td>
 				<td><a target="_blank" href=<%= urlBase %>/article/<%= articles[i].urlTitle.S %>>Link</a></td>
 				<td><a target="_blank" href=<%= urlBase %>/editor/editArticle/<%= articles[i].id.S %>>Link</a></td>
 			</tr>

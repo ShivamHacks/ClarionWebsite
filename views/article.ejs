@@ -1,40 +1,57 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title><%= article.title %></title>
-    <!-- ADD META TAGS w/ author and such for citing purposes -->
-    <!-- Add citation on bottom !!! -->
-    <!-- add other fancy footer stuff -->
-    <link rel='stylesheet' type='text/css' href='https://fonts.googleapis.com/css?family=Lato'>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
-    <style>
-    .main {
-      text-align: justify;
-    }
-    .txt {
-      text-align: justify;
-      font-family: 'Lato';
-      font-size: 1.2em;
-    }
-    .img-responsive {
-      margin: auto;
-    }
-    </style>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<head>
+  <title><%= article.title %></title>
+  <!-- ADD META TAGS w/ author and such for citing purposes -->
+  <!-- Add citation on bottom !!! -->
+  <!-- add other fancy footer stuff -->
+  <link rel='stylesheet' type='text/css' href='https://fonts.googleapis.com/css?family=Open Sans'>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <style>
+  html, body {
+    font-family: 'Open Sans';
+  }
+  .txt {
+    font-size: 1.3em;
+    line-height: 1.5em;
+  }
+  .img-responsive {
+    margin: auto;
+  }
+  #footer {
+    background-color: #282828;
+    color: #FFFFFF;
+    width: 100vw;
+    padding: 5vw;
+  }
+  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  </head>
-  <body>
+</head>
+<body>
 
-    <div class="container">
-      <h1 class="text-center"><%= article.title %></h1>
-      <p class="text-center">By 
-        <a target="_blank" href=<%= urlBase %>/author/<%= article.author %>><%= article.author %></a>
-        in 
-        <a target="_blank" href=<%= urlBase %>/categories/<%= article.category %>><%= article.category %></a>
-        on 
-        <%= article.date %></p><br>
-      <%- body %>
+   <% include ./partials/nav %>
+
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-2 col-sm-1"></div>
+      <div class="col-lg-8 col-sm-10 col-xs-12">
+        <h1 class="text-center"><%= article.title %></h1>
+        <p class="text-center">By 
+          <a target="_blank" href=<%= urlBase %>/author/<%= article.author %>><%= article.author %></a>&nbsp;in&nbsp;
+          <a target="_blank" href=<%= urlBase %>/categories/<%= article.category %>><%= article.category %></a>&nbsp;on&nbsp;
+          <%= article.datePublished %>
+        </p><br>
+        <%- body %>
+      </div>
+      <div class="col-lg-2 col-sm-1"></div>
     </div>
+  </div><br><br>
 
-  </body>
+  <% include ./partials/footer %>
+
+  <script type="text/javascript" src="/js/jquery.min.js"></script>
+  <script type="text/javascript" src="/js/bootstrap.min.js"></script>
+
+</body>
 </html>

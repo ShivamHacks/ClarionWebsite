@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>title</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+</head>
+<body>
+
+
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Author</th>
+        <th>Category</th>
+        <th>Date Published</th>
+        <th>Link</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% for (var i = 0; i < articles.length; i++) { %>
+      <tr>
+        <td><%= articles[i].title.S %></td>
+        <td><%= articles[i].author.S %></td>
+        <td><%= articles[i].category.S %></td>
+        <td><%= articles[i].datePublished.S %></td>
+        <td><a target="_blank" href=<%= urlBase %>/article/<%= articles[i].urlTitle.S %>>Link</a></td>
+      </tr>
+      <% } %>
+    </tbody>
+  </table>
+
+</body>
+</html>

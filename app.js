@@ -22,7 +22,7 @@ router.get('/', function (req, res) {
 var txtStorage = 'clarionarticles';
 var imgStorage = 'clarionimgs';
 var articlesTable = 'articlesTable';
-var articlesIndex = 'urlTitle-index';
+
 
 // Article add
 
@@ -76,6 +76,38 @@ app.get('/article/:title', function (req, res) {
             }
           });
         }
+      });
+    }
+  });
+});
+app.get('/category/:category', function (req, res) {
+  var category = req.params.category;
+  queryCategory(category, function(data) {
+    if (_.isEmpty(data)) {
+      res.send("ERROR, category not found, 404");
+    } else {
+      dbBatchGet(data.Items, function(data) {
+        res.render('articles_list', {
+          articles: data.Responses.articlesTable,
+          title: category,
+          urlBase: "localhost:3000"
+        });
+      });
+    }
+  });
+});
+app.get('/author/:author', function (req, res) {
+  var author = req.params.author;
+  queryAuthor(author, function(data) {
+    if (_.isEmpty(data)) {
+      res.send("ERROR, author not found, 404");
+    } else {
+      dbBatchGet(data.Items, function(data) {
+        res.render('articles_list', {
+          articles: data.Responses.articlesTable,
+          title: author,
+          urlBase: "localhost:3000"
+        });
       });
     }
   });
@@ -180,6 +212,20 @@ app.get('/editor/directory', function (req, res) {
 });
 // Router functions -------------------------------------------
 
+/* AWS format
+
+  DynamoDB
+  - 1 table titled 'articlesTable'
+  - 3 global secondary indexes:
+    - urlTitleIndex
+    - urlCategoryIndex
+    - urlAuthorIndex
+
+  S3
+  - 1 bucket titled 'clarionimgs'
+  - 1 bucket titled 'clarionarticles'
+
+*/
 
 // DB functions -------------------------------------------
 var dbPutParams = function(id, article) {
@@ -189,8 +235,10 @@ var dbPutParams = function(id, article) {
       title: { S: article.title },
       author: { S: article.author },
       category: { S: article.category },
-      date: { S: article.date },
-      urlTitle: { S: article.title.replace(/\s+/g, '-').toLowerCase() }
+      datePublished: { S: article.date },
+      urlTitle: { S: article.title.replace(/\s+/g, '-').toLowerCase() },
+      urlCategory: { S: article.category.toLowerCase() },
+      urlAuthor: { S: article.author.replace(/\s+/g, '-').toLowerCase() }
     },
     TableName: articlesTable
   };
@@ -199,19 +247,6 @@ var dbGetParams = function(id) {
   return {
     TableName : articlesTable,
     Key : { id : { S : id } }
-  };
-};
-var dbQueryParams = function(title) {
-  return {
-    TableName: articlesTable,
-    IndexName: articlesIndex,
-    AttributesToGet: [ 'id' ],
-    KeyConditions: {
-      urlTitle: {
-        ComparisonOperator: 'EQ',
-        AttributeValueList: [ { S: title } ]
-      }
-    }
   };
 };
 function putArticle(id, article) {
@@ -228,23 +263,68 @@ function getArticle(id, callback) {
     else { callback(data); }
   });
 }
+
+// Query on attribute, returns list of id's. Then do batchgetitem on the data
+var dbQueryParams = function(attribute, key, index) {
+  var params = {
+    TableName: articlesTable,
+    IndexName: index,
+    AttributesToGet: [ 'id' ],
+    KeyConditions: {}
+  };
+  params.KeyConditions[key] = {
+    ComparisonOperator: 'EQ',
+    AttributeValueList: [ { S: attribute } ]
+  };
+  return params;
+};
 function queryArticle(title, callback) {
-  var params = dbQueryParams(title);
+  var params = dbQueryParams(title, 'urlTitle', 'urlTitleIndex');
+  dbQuery(params, callback)
+}
+function queryCategory(category, callback) {
+  var params = dbQueryParams(category, 'urlCategory', 'urlCategoryIndex');
+  dbQuery(params, callback);
+}
+function queryAuthor(author, callback) {
+  var params = dbQueryParams(author, 'urlAuthor', 'urlAuthorIndex');
+  dbQuery(params, callback);
+}
+function dbQuery(params, callback) {
   db.query(params, function(err, data) {
     if (err) { console.log(err); } 
     else { callback(data); }
   });
 }
+// add recent articles query later
+
+// Scan all articles
 function scanArticles(callback) {
   var params = {
     TableName: articlesTable,
-    ProjectionExpression: "id, title, author, category, urlTitle"
+    ProjectionExpression: "id, title, author, category, urlTitle, datePublished"
   };
   db.scan(params, function(err, data) {
     if (err) { console.log(err); } 
     else { callback(data); }
   });
 }
+// Batch get item
+function dbBatchGet(keys, callback) {
+  var params = {
+    RequestItems: {
+        'articlesTable': {
+            Keys: keys,
+            AttributesToGet: [ 'id', 'title', 'author', 'category', 'urlTitle', 'datePublished' ]
+        }
+    }
+  }
+  db.batchGetItem(params, function(err, data) {
+    if (err) console.log(err);
+    else callback(data);
+  });
+}
+
 // DB functions -------------------------------------------
 
 
@@ -418,11 +498,11 @@ function boRegex(line) {
 
 
 
-app.use(function(err, req, res, next) {
-  console.log(err);
-  res.status(err.status || 500);
-  res.send("ERROR");
-});
+  app.use(function(err, req, res, next) {
+    console.log(err);
+    res.status(err.status || 500);
+    res.send("ERROR");
+  });
 
 
-module.exports = app;
+  module.exports = app;

@@ -3,7 +3,7 @@
 <head>
 	<title>Add an article</title>
 
-	<script src="/js/jquery.min.js"></script>
+	<script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
 
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
 	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
@@ -14,15 +14,16 @@
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.6.1/css/bootstrap-datepicker.min.css">
 	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.6.1/js/bootstrap-datepicker.min.js"></script>
 
+	<link href="http://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.1/summernote.css" rel="stylesheet">
+	<script src="http://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.1/summernote.min.js"></script>
+
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 </head>
 <body>
 
-	<% include ./partials/nav %>
-
 	<div class="container">
-		<form method="post" action=/editor/newArticle/<%= id %> enctype="multipart/form-data" id="article-info">
+		<form method="post" action=/editor/newArticle/<%= article.id %> enctype="multipart/form-data" id="article-info">
 			<div class="form-group">
 				<label for="article-title">Title</label>
 				<input type="text" class="form-control" id="article-title" placeholder="Article Title" name="article[title]">
@@ -39,21 +40,32 @@
 				<label for="article-date">Date Published</label>
 				<input type="text" class="form-control" id="article-date" placeholder="Date Published" name="article[date]">
 			</div>
+			<div class="form-group">
+				<label for="article-header">Header Image Name</label>
+				<input type="text" class="form-control" id="article-header" placeholder="Header Image Name. Ex: myfavimg.png" name="article[headerImg]">
+			</div>
+			<label for="summernote">Content</label>
+			<textarea id="summernote" name="article[content]"></textarea>
 		</form>
-		<form id="upload-widget" method="post" action=/editor/upload/<%=id%> class="dropzone"></form><br>
+		<label>Images</label>
+		<form id="upload-widget" method="post" action=/editor/upload/<%=article.id%> class="dropzone"></form><br>
 		<button class="btn btn-default pull-right" id="submit">Submit</button>
 	</div>
 
-	<% include ./partials/footer %>
-
 	<script>
 
-	var title = <%- JSON.stringify(title) %>;
-	var author = <%- JSON.stringify(author) %>;
-	var category = <%- JSON.stringify(category) %>;
+	var title = <%- JSON.stringify(article.title) %>;
+	var author = <%- JSON.stringify(article.author) %>;
+	var category = <%- JSON.stringify(article.category) %>;
+	var datePublished = <%- JSON.stringify(article.datePublished) %>;
+	var headerImg = <%- JSON.stringify(article.headerImg) %>;
+	var content = <%- JSON.stringify(article.content) %>;
 	$("#article-title").val(title);
 	$("#article-author").val(author);
 	$("#article-category").val(category);
+	$("#article-date").val(datePublished);
+	$("#article-header").val(headerImg);
+	$("#article-content").val(content);
 
 	$('#article-date').datepicker({
 		format: "MM dd, yyyy",
@@ -61,10 +73,21 @@
 		todayHighlight: true
 	});
 
+	$('#summernote').summernote({
+		toolbar: [ ['style', ['bold', 'italic', 'underline', 'clear']], ['insert', ['link']] ],
+		callbacks: {
+			onPaste: function (e) {
+				var bufferText = ((e.originalEvent || e).clipboardData || window.clipboardData).getData('Text');
+				e.preventDefault();
+				setTimeout(function () { document.execCommand('insertText', false, bufferText); }, 10);
+			}
+		}
+	});
+
 	Dropzone.autoDiscover = false;
 	var myDropzone = new Dropzone("#upload-widget", { autoProcessQueue: false });
 
-	$( "#submit" ).click(function() { 
+	$( "#submit" ).click(function() {
 		myDropzone.processQueue();
 		$( "#article-info" ).submit();
 	}); 

@@ -6,6 +6,7 @@
   <!-- Add citation on bottom !!! -->
   <!-- add other fancy footer stuff -->
   <link rel='stylesheet' type='text/css' href='https://fonts.googleapis.com/css?family=Open Sans'>
+  <link rel='stylesheet' type='text/css' href='https://fonts.googleapis.com/css?family=Lato'>
   <link rel="stylesheet" href="/css/bootstrap.min.css">
   <style>
   html, body {
@@ -14,6 +15,11 @@
   .txt {
     font-size: 1.3em;
     line-height: 1.5em;
+  }
+  .txt2 {
+    font-size: 1.3em;
+    line-height: 1.5em;
+    font-family: 'Lato';
   }
   .img-responsive {
     margin: auto;
@@ -24,31 +30,93 @@
     width: 100vw;
     padding: 5vw;
   }
+  #heading {
+    width: calc(100vw);
+    min-height: calc(75vh);
+    display: table;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-size: cover;
+    background: url(<%= header.img %>);
+    text-align: center;
+  }
+  #heading h1 {
+    color: <%= header.color %>;
+    display: table-cell;
+    vertical-align: middle;
+  }
+  .buffer {
+    height: calc(10vh);
+    width: calc(100vw);
+  }
+  .navbar {
+    margin-bottom: 0;
+    border-radius: 0;
+  }
   </style>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 </head>
 <body>
 
-   <% include ./partials/nav %>
+  <% include ./partials/nav %>
+
+  <div id="heading">
+    <h1><%= article.title %></h1>
+  </div>
+
+  <div class="buffer"></div>
 
   <div class="container">
     <div class="row">
-      <div class="col-lg-2 col-sm-1"></div>
-      <div class="col-lg-8 col-sm-10 col-xs-12">
-        <h1 class="text-center"><%= article.title %></h1>
-        <p class="text-center">By 
-          <a target="_blank" href=<%= urlBase %>/author/<%= article.author %>><%= article.author %></a>&nbsp;in&nbsp;
-          <a target="_blank" href=<%= urlBase %>/categories/<%= article.category %>><%= article.category %></a>&nbsp;on&nbsp;
-          <%= article.datePublished %>
-        </p><br>
+      
+      <div class="col-lg-2 col-sm-3">
+        <div class="row">
+          <div class="col-xs-4 col-sm-12">
+            <img class="img-responsive img-circle" src="http://www.realtimearts.net/data/images/art/46/4640_profile_nilssonpolias.jpg">
+          </div>
+          <div class="col-xs-8 col-sm-12">
+            <p class="txt2">
+              Published in <a target="_blank" href=<%= urlBase %>/categories/<%= article.category %>><%= article.category %></a><br>
+              By <a target="_blank" href=<%= urlBase %>/author/<%= article.author %>><%= article.author %></a><br>
+              On <%= article.datePublished %>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="buffer hidden-sm hidden-lg"></div>
+
+      <div class="col-lg-9 col-sm-9 col-xs-12">
         <%- body %>
       </div>
-      <div class="col-lg-2 col-sm-1"></div>
-    </div>
-  </div><br><br>
 
-  <% include ./partials/footer %>
+      <div class="col-lg-1"></div>
+    </div>
+  </div>
+
+  <div class="buffer"></div>
+
+  <div id="footer">
+    <div class="row text-center">
+      <div class="col-sm-4">
+        <a href="#">Link 1</a><br>
+        <a href="#">Link 2</a><br>
+        <a href="#">Link 3</a>
+      </div>
+      <div class="col-sm-4">
+        <a href="#">Link 4</a><br>
+        <a href="#">Link 5</a><br>
+        <a href="#">Link 6</a>
+      </div>
+      <div class="col-sm-4">
+        <a href="#">Link 7</a><br>
+        <a href="#">Link 8</a><br>
+        <a href="#">Link 9</a>
+      </div>
+    </div>
+  </div>
 
   <script type="text/javascript" src="/js/jquery.min.js"></script>
   <script type="text/javascript" src="/js/bootstrap.min.js"></script>

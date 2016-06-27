@@ -8,29 +8,26 @@
 </head>
 <body>
 
+  <% include ./partials/nav %>
 
-  <table class="table table-striped">
-    <thead>
-      <tr>
-        <th>Title</th>
-        <th>Author</th>
-        <th>Category</th>
-        <th>Date Published</th>
-        <th>Link</th>
-      </tr>
-    </thead>
-    <tbody>
-      <% for (var i = 0; i < articles.length; i++) { %>
-      <tr>
-        <td><%= articles[i].title.S %></td>
-        <td><%= articles[i].author.S %></td>
-        <td><%= articles[i].category.S %></td>
-        <td><%= articles[i].datePublished.S %></td>
-        <td><a target="_blank" href=<%= urlBase %>/article/<%= articles[i].urlTitle.S %>>Link</a></td>
-      </tr>
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-2 col-sm-1"></div>
+      <div class="col-lg-8 col-sm-10 col-xs-12">
+        <% for (var i = 0; i < articles.length; i++) { %>
+        <h1><%= articles[i].title.S %></h1>
+        <p>By 
+          <a target="_blank" href=<%= urlBase %>/author/<%= articles[i].author.S %>><%= articles[i].author.S %></a>&nbsp;in&nbsp;
+          <a target="_blank" href=<%= urlBase %>/categories/<%= articles[i].category.S %>><%= articles[i].category.S %></a>&nbsp;on&nbsp;
+          <%= articles[i].datePublished.S %>
+        </p><hr>
       <% } %>
-    </tbody>
-  </table>
+      </div>
+      <div class="col-lg-2 col-sm-1"></div>
+    </div>
+  </div><br><br>
+
+  <% include ./partials/footer %>
 
 </body>
 </html>

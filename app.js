@@ -96,7 +96,27 @@ app.get('/article/:category/:title', function (req, res) {
   var params = articleGetParams(category, title);
   docClient.get(params, function(err, data) {
     if (err) { res.json(err); } 
-    else { res.json(data); }
+    else {
+      var article = data.Item;
+      article.headerImg = "https://s3.amazonaws.com/clarionimgs/" + article.id + "-" + article.headerImg;
+      var params = { Bucket: 'clarionarticles', Key: article.id };
+      s3.getObject(params, function(err, data) {
+        if (err) { 
+          console.log(err, err.stack);
+          res.send("ERROR, could not find text resource");
+        }
+        else {
+          var buffer = new Buffer(data.Body);
+          var body = buffer.toString('utf-8');
+
+          res.render('article', {
+            article: article,
+            body: body,
+            urlBase: "localhost:3000"
+          });
+        }
+      });
+    }
   });
 });
 var articleGetParams = function(category, title) {
@@ -123,10 +143,10 @@ var categoryGetParams = function(category) {
     TableName: 'articleTable',
     KeyConditionExpression: "#cat = :category",
     ExpressionAttributeNames:{
-        "#cat": "urlCategory"
+      "#cat": "urlCategory"
     },
     ExpressionAttributeValues: {
-        ":category": category
+      ":category": category
     }
   };
 };
@@ -146,10 +166,10 @@ var authorGetParams = function(author) {
     IndexName: 'urlAuthorIndex',
     KeyConditionExpression: "#auth = :author",
     ExpressionAttributeNames:{
-        "#auth": "urlAuthor"
+      "#auth": "urlAuthor"
     },
     ExpressionAttributeValues: {
-        ":author": author
+      ":author": author
     }
   };
 };
@@ -217,10 +237,8 @@ app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
   var id = req.params.id;
   var empty = noNullVals(article);
   if (empty.length == 0) {
-    // TODO, upload content and fix parser only to seek headers
-    // TODO, make category a dropdown? or can people figure out how to format cateogory (it should be a trimmed string)
-    var content = article.content;
-    // put content in s3
+    var html = parseContent(id, article.content);
+    s3TxtUpload(id, html);
     delete article.content;
     // in callback, add type (error or not error)
     articlePut(id, article, function(data) {
@@ -230,8 +248,6 @@ app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
     res.send("ERROR");
     // redirect to an error page or send error back to client
   }
-  // just to make sure all of the files have been uploaded
-  // so I can redirect to their article
 });
 var articlePutParams = function(id, article) {
   return {
@@ -305,7 +321,7 @@ app.get('/editor/directory', function (req, res) {
 
 /* AWS format
 
-  DynamoDB
+  DynamoDB - this is wrong!
   - 1 table titled 'articlesTable'
   - 3 global secondary indexes:
     - urlTitleIndex
@@ -317,103 +333,6 @@ app.get('/editor/directory', function (req, res) {
   - 1 bucket titled 'clarionarticles'
 
   */
-
-// DB functions -------------------------------------------
-var dbPutParams = function(id, article) {
-  return {
-    Item: {
-      id: { S: id },
-      title: { S: article.title },
-      author: { S: article.author },
-      category: { S: article.category },
-      datePublished: { S: article.date },
-      urlTitle: { S: article.title.replace(/\s+/g, '-').toLowerCase() },
-      urlCategory: { S: article.category.toLowerCase() },
-      urlAuthor: { S: article.author.replace(/\s+/g, '-').toLowerCase() }
-    },
-    TableName: articlesTable
-  };
-};
-var dbGetParams = function(id) {
-  return {
-    TableName : articlesTable,
-    Key : { id : { S : id } }
-  };
-};
-function putArticle(id, article) {
-  var params = dbPutParams(id, article);
-  db.putItem(params, function(err, data) {
-    if (err) { console.log(err); }
-    else {}
-  });
-}
-function getArticle(id, callback) {
-  var params = dbGetParams(id);
-  db.getItem(params, function(err, data) {
-    if (err) { console.log(err); } 
-    else { callback(data); }
-  });
-}
-
-// Query on attribute, returns list of id's. Then do batchgetitem on the data
-var dbQueryParams = function(attribute, key, index) {
-  var params = {
-    TableName: articlesTable,
-    IndexName: index,
-    AttributesToGet: [ 'id' ],
-    KeyConditions: {}
-  };
-  params.KeyConditions[key] = {
-    ComparisonOperator: 'EQ',
-    AttributeValueList: [ { S: attribute } ]
-  };
-  return params;
-};
-function queryArticle(title, callback) {
-  var params = dbQueryParams(title, 'urlTitle', 'urlTitleIndex');
-  dbQuery(params, callback)
-}
-function queryCategory(category, callback) {
-  var params = dbQueryParams(category, 'urlCategory', 'urlCategoryIndex');
-  dbQuery(params, callback);
-}
-function queryAuthor(author, callback) {
-  var params = dbQueryParams(author, 'urlAuthor', 'urlAuthorIndex');
-  dbQuery(params, callback);
-}
-function dbQuery(params, callback) {
-  db.query(params, function(err, data) {
-    if (err) { console.log(err); } 
-    else { callback(data); }
-  });
-}
-function scanArticles(callback) {
-  var params = {
-    TableName: articlesTable,
-    ProjectionExpression: "id, title, author, category, urlTitle, datePublished"
-  };
-  db.scan(params, function(err, data) {
-    if (err) { console.log(err); } 
-    else { callback(data); }
-  });
-}
-function dbBatchGet(keys, callback) {
-  var params = {
-    RequestItems: {
-      'articlesTable': {
-        Keys: keys,
-        AttributesToGet: [ 'id', 'title', 'author', 'category', 'urlTitle', 'datePublished' ]
-      }
-    }
-  }
-  db.batchGetItem(params, function(err, data) {
-    if (err) console.log(err);
-    else callback(data);
-  });
-}
-
-// DB functions -------------------------------------------
-
 
 // S3 functions -------------------------------------------
 var txtStorage = 'clarionarticles';
@@ -439,22 +358,17 @@ function s3ImgUpload(name, path, id, callback) {
   });
 }
 
-function s3TxtUpload(id, path, data, callback) {
-  fs.writeFileSync(path, data);
-  var txt = fs.readFileSync(path);
+function s3TxtUpload(id, content) {
   var params = {
-    Bucket: txtStorage, 
+    Bucket: 'clarionarticles', 
     Key: id, 
-    Body: txt,
-    ContentType: txt.mimetype,
+    Body: content,
+    ContentType: 'text/plain',
     ACL: 'public-read'
   };
   s3.upload(params, function(err, data) {
-    if (err) { 
-      console.log(err);
-      callback(false, path);
-    }
-    else { callback(true, path); }
+    if (err) {  console.log(err); }
+    else {  }
   });
 }
 // S3 functions -------------------------------------------
@@ -508,44 +422,47 @@ var parser = new Parser();
 
 parser.addRule(/\[(.*?)\]/, function(tag) {
   var src = "https://s3.amazonaws.com/clarionimgs/" + tag.replace(/[[\]]/g,'');
-  console.log(tag);
-  return "</span><img class='img-responsive' src='" + src + "'><span class='txt'>";
+  return "<br><img class='img-responsive' src='" + src + "'><br>";
 });
-parser.addRule(/\<b(.*?)\b>/, function(tag) {
-  return "<b>" + tag.replace(/<b|b>/g,'').trim() + "</b>";
+parser.addRule(/\{(.*?)\}/, function(tag) {
+  return "<h2>" + tag.replace(/[{}]/g,'').trim() + "</h2>";
 });
-parser.addRule(/\<i(.*?)\i>/, function(tag) {
-  return "<i>" + tag.replace(/<i|i>/g,'').trim() + "</i>";
-});
-parser.addRule(/\<u(.*?)\u>/, function(tag) {
-  return "<u>" + tag.replace(/<u|u>/g,'').trim() + "</u>";
-});
-parser.addRule(/\<h(.*?)\h>/, function(tag) {
-  return "<h2>" + tag.replace(/<h|h>/g,'').trim() + "</h2>";
-});
-parser.addRule(/\{(.*)}/, function(tag) {
-  var linkInfo = tag.replace(/[{}]/g, "").split(",");
-  return "<a href='" + linkInfo[1].trim() + "' target='_blank'>" + linkInfo[0].trim() + "</a>";
-});
+function parseContent(id, content) {
+  // takes [ imagename.type  ] and turns it into [id-imagename.type]
+  var text = content.trim().replace(/\[\s*(.*?)\s*]/g, '[$1]').replace(/\[/g,"[" + id + "-");
+  var html = parser.render(text);
+  return html;
+}
+
+/* Parser
+
+  - image: [imagename.type]
+  - hedaer: { header }
+
+*/
+
+
+
 
 // possibly add new rule for paragraphs???
 // add <q q> for quote - no, don't
 
-function parseDoc(fileLoc, id, callback) {
+
+/*function parseDoc(fileLoc, id, callback) {
   var lr = new LineByLineReader(fileLoc);
   var html = "<span class='txt'>";
   lr.on('line', function (line) {
-    if (line == "")
+    if (line == "") { 
       html += "<br>";
-    else
-      var withId = line.trim().replace(/\[/g,"[" + id + "-");
+    else {
+      var withId = 
     html += parser.render(withId);
   });
   lr.on('end', function () {
     html += "</span>"
     callback(html);
   });
-}
+}*/
 
 // Parsing functions -------------------------------------------
 
@@ -676,11 +593,11 @@ app.get('/author/:author', function (req, res) {
 });*/
 
 
-  app.use(function(err, req, res, next) {
-    console.log(err);
-    res.status(err.status || 500);
-    res.send("ERROR");
-  });
+app.use(function(err, req, res, next) {
+  console.log(err);
+  res.status(err.status || 500);
+  res.send("ERROR");
+});
 
 
-  module.exports = app;
+module.exports = app;

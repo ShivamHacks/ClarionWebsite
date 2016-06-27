@@ -24,12 +24,12 @@
 		<tbody>
 			<% for (var i = 0; i < articles.length; i++) { %>
 			<tr>
-				<td><%= articles[i].title.S %></td>
-				<td><%= articles[i].author.S %></td>
-				<td><%= articles[i].category.S %></td>
-				<td><%= articles[i].datePublished.S %></td>
-				<td><a target="_blank" href=<%= urlBase %>/article/<%= articles[i].urlTitle.S %>>Link</a></td>
-				<td><a target="_blank" href=<%= urlBase %>/editor/editArticle/<%= articles[i].id.S %>>Link</a></td>
+				<td><%= articles[i].title %></td>
+				<td><%= articles[i].author %></td>
+				<td><%= articles[i].category %></td>
+				<td><%= articles[i].datePublished %></td>
+				<td><a target="_blank" href=<%= urlBase %>/article/<%= articles[i].urlCategory %>/<%= articles[i].urlTitle %>>Link</a></td>
+				<td><a target="_blank" href=<%= urlBase %>/editor/editArticle/<%= articles[i].urlCategory %>/<%= articles[i].urlTitle %>>Link</a></td>
 			</tr>
 			<% } %>
 		</tbody>

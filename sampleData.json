@@ -1,0 +1,25 @@
+{
+	"data": [
+
+	{
+		"urlCategory": { "S": "news" },
+		"urlTitle": { "S": "title1" },
+		"urlAuthor": { "S": "shivam-agrawal" },
+		"category": { "S": "News" },
+		"title": { "S": "Title1" },
+		"datePublished": { "N": "42546" },
+		"author": { "S": "Shivam Agrawal" }
+	},
+
+	{
+		"urlCategory": { "S": "news" },
+		"urlTitle": { "S": "title2" },
+		"urlAuthor": { "S": "dhruv-agrawal" },
+		"category": { "S": "News" },
+		"title": { "S": "Title2" },
+		"datePublished": { "N": "42542" },
+		"author": { "S": "Dhruv Agrawal" }
+	},
+
+	]
+}

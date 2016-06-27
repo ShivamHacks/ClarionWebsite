@@ -65,7 +65,6 @@
 	$("#article-category").val(category);
 	$("#article-date").val(datePublished);
 	$("#article-header").val(headerImg);
-	$("#article-content").val(content);
 
 	$('#article-date').datepicker({
 		format: "MM dd, yyyy",
@@ -83,6 +82,7 @@
 			}
 		}
 	});
+	$('#summernote').summernote('code', content);
 
 	//setInterval(function(){console.log($("#summernote").code()); }, 2000);
 

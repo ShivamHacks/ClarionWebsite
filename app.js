@@ -111,7 +111,6 @@ app.get('/article/:category/:title', function (req, res) {
 
           res.render('article', {
             article: article,
-            body: body,
             urlBase: "localhost:3000"
           });
         }
@@ -135,7 +134,12 @@ app.get('/category/:category', function (req, res) {
   var params = categoryGetParams(category);
   docClient.query(params, function(err, data) {
     if (err) { res.json(err); } 
-    else { res.json(data); }
+    else { 
+      res.render('articles_list', {
+        articles: data.Items,
+        urlBase: "localhost:3000"
+      });
+    }
   });
 });
 var categoryGetParams = function(category) {
@@ -192,9 +196,11 @@ app.use('/editor', function(req, res, next) {
   if (found) next();
   else res.send("NOT AUTHORIZED");
 });
+
 app.get('/editorlogin', function (req,res,next) {
   res.render('login', {}); // TODO, redirect if logged in
 });
+
 app.post('/editorlogin', multipartMiddleware, function( req, res, next ) {
   var user = req.body;
   var approved = require('./approved.json').approved;
@@ -210,6 +216,7 @@ app.post('/editorlogin', multipartMiddleware, function( req, res, next ) {
     res.status(200).send("You are not an approved editor");
   }
 });
+
 app.get('/editor/logout', function( req, res, next ) {
   var cookies = new Cookies(req, res);
   cookies.set('uname');
@@ -221,13 +228,7 @@ app.get('/editor/newArticle', function (req, res) {
   var id = shortid.generate();
   res.render('add_article', { 
     article: { 
-      id: id, 
-      title: '', 
-      author: '', 
-      category: '', 
-      datePublished: '', 
-      headerImg: '',
-      content: ''
+      id: id,  title: '',  author: '', category: '', datePublished: '', headerImg: '', content: ''
     }
   });
 });
@@ -238,7 +239,7 @@ app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
   var empty = noNullVals(article);
   if (empty.length == 0) {
     var html = parseContent(id, article.content);
-    s3TxtUpload(id, html);
+    s3TxtUpload(id, article.content, html);
     delete article.content;
     // in callback, add type (error or not error)
     articlePut(id, article, function(data) {
@@ -249,6 +250,63 @@ app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
     // redirect to an error page or send error back to client
   }
 });
+
+app.post('/editor/upload/:id', upload.single('file'), function( req, res, next ) {
+  var id = req.params.id;
+  console.log("FILE UPLOAD: " + id);
+  var name = req.file.originalname;
+  var path = req.file.path;
+  if (req.file.mimetype.indexOf("image/") > -1) {
+    s3ImgUpload(name, path, id, deleteFile);
+  }
+  res.status( 200 ).send("ALL GOOD DAWG");
+});
+
+app.get('/editor/editArticle/:category/:title', function (req, res) {
+  // unused images are NOT deleted
+  // text resource is overwritten
+  var category = req.params.category;
+  var title = req.params.title;
+  var params = articleGetParams(category, title);
+  docClient.get(params, function(err, data) {
+    if (err) { res.json(err); } 
+    else {
+      var article = data.Item;
+      var params = { Bucket: 'clarionarticles', Key: article.id };
+      s3.getObject(params, function(err, data) {
+        if (err) { 
+          console.log(err, err.stack);
+          res.send("ERROR, could not find content");
+        }
+        else {
+          var buffer = new Buffer(data.Body);
+          var body = buffer.toString('utf-8');
+          article.content = JSON.parse(body).original;
+
+          res.render('add_article', {
+            article: article,
+            urlBase: "localhost:3000"
+          });
+        }
+      });
+    }
+  });
+});
+
+app.get('/editor/directory', function (req, res) {
+  docClient.scan({ TableName: "articleTable" }, function(err, data) {
+    if (err) { res.json(err); } 
+    else {
+      res.render('directory', { 
+        urlBase: "http://localhost:3000",
+        articles: data.Items
+      });
+    }
+  });
+});
+
+
+
 var articlePutParams = function(id, article) {
   return {
     TableName: 'articleTable',
@@ -272,50 +330,6 @@ function articlePut(id, article, callback) {
     else { callback(data); }
   });
 }
-
-app.post('/editor/upload/:id', upload.single('file'), function( req, res, next ) {
-  var id = req.params.id;
-  console.log("FILE UPLOAD: " + id);
-  var name = req.file.originalname;
-  var path = req.file.path;
-  if (req.file.mimetype.indexOf("image/") > -1) {
-    s3ImgUpload(name, path, id, deleteFile);
-  }
-  res.status( 200 ).send("ALL GOOD DAWG");
-});
-app.get('/editor/editArticle/:id', function (req, res) {
-  // unused images are NOT deleted
-  // text resource is overwritten
-  var id = req.params.id;
-  getArticle(id, function(data) {
-    if (_.isEmpty(data)) {
-      res.send("Unable to find data");
-    } else {
-      res.render('add_article', { 
-        id: id,
-        title: data.Item.title.S,
-        author: data.Item.author.S,
-        category: data.Item.author.S
-      });
-    }
-  })
-});
-app.get('/editor/directory', function (req, res) {
-  docClient.scan({ TableName: "articleTable" }, function(err, data) {
-    if (err) { res.json(err); } 
-    else { res.json(data); }
-  });
-  /*scanArticles(function(data) {
-    if (_.isEmpty(data)) {
-      res.send("Unable to find data");
-    } else {
-      res.render('directory', { 
-        urlBase: "http://localhost:3000",
-        articles: data.Items
-      });
-    }
-  });*/
-});
 
 // Router functions -------------------------------------------
 
@@ -358,7 +372,11 @@ function s3ImgUpload(name, path, id, callback) {
   });
 }
 
-function s3TxtUpload(id, content) {
+function s3TxtUpload(id, txtContent, htmlContent) {
+  var content = JSON.stringify({
+    original: txtContent,
+    formatted: htmlContent
+  });
   var params = {
     Bucket: 'clarionarticles', 
     Key: id, 

@@ -6,21 +6,11 @@ var app = express();
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
-//app.use(bodyParser.json());
-var router = express.Router();
-app.use(router);
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(process.env.PORT || '3000', function () {
   console.log('Server started on port: ' + this.address().port);
 });
-
-router.get('/', function (req, res) {
-  res.render('index', { title: "LOL" });
-});
-
-var articlesTable = 'articlesTable';
-
 
 // Article add
 
@@ -37,7 +27,9 @@ var _ = require('underscore');
 var AWS = require('aws-sdk');
 AWS.config.loadFromPath('./config.json').aws;
 var s3 = new AWS.S3();
-var db = new AWS.DynamoDB();
+var docClient = new AWS.DynamoDB.DocumentClient();
+
+var Cookies = require('cookies');
 
 function generateSampleData() {
   var authors = [ 'Shivam Agrawal', 'Dhruv Agrawal' ];
@@ -88,7 +80,9 @@ function loadSampleData(Items) {
 // or have another table with key = urlAuthor and sort = urlTitle, then 3rd attribute = category
 // then I can simple query against this to get title and category, then i can get the rest, or simply maintain two tables
 
-var docClient = new AWS.DynamoDB.DocumentClient();
+app.get('/', function (req, res) {
+  res.render('index', { title: "LOL" });
+});
 
 app.get('/article/:category/:title', function (req, res) {
   var category = req.params.category;
@@ -118,15 +112,6 @@ app.get('/article/:category/:title', function (req, res) {
     }
   });
 });
-var articleGetParams = function(category, title) {
-  return {
-    TableName: 'articleTable',
-    Key:{
-      "urlCategory": category,
-      "urlTitle": title
-    }
-  };
-};
 
 // TODO, limit to 10 order of closest date
 app.get('/category/:category', function (req, res) {
@@ -142,18 +127,6 @@ app.get('/category/:category', function (req, res) {
     }
   });
 });
-var categoryGetParams = function(category) {
-  return {
-    TableName: 'articleTable',
-    KeyConditionExpression: "#cat = :category",
-    ExpressionAttributeNames:{
-      "#cat": "urlCategory"
-    },
-    ExpressionAttributeValues: {
-      ":category": category
-    }
-  };
-};
 
 // check back on this!
 app.get('/author/:author', function (req, res) {
@@ -164,44 +137,46 @@ app.get('/author/:author', function (req, res) {
     else { res.json(data); }
   });
 });
-var authorGetParams = function(author) {
-  return {
-    TableName: 'articleTable',
-    IndexName: 'urlAuthorIndex',
-    KeyConditionExpression: "#auth = :author",
-    ExpressionAttributeNames:{
-      "#auth": "urlAuthor"
-    },
-    ExpressionAttributeValues: {
-      ":author": author
-    }
-  };
-};
-
-// TODO, need to edit all of these to update them!
 
 // Editor Functions
 
 // there will be a preset list of approved editors in the form of a json file.
-var Cookies = require('cookies');
+
+var jwt = require('jsonwebtoken');
+var secret = "lololol";
 
 app.use('/editor', function(req, res, next) {
-  console.log('Request URL:', req.originalUrl);
+  if (req.originalUrl == '/editor/login') { next(); }
+  else {
+    var cookies = new Cookies(req, res);
+    var token = cookies.get('token');
+    if (authorized(token)) next();
+    else res.send('NOT AUTHORIZED');
+  }
+});
+
+function authorized(token) {
+  try {
+    var user = jwt.verify(token, secret);
+    var approved = require('./approved.json').approved;
+    var found = _.find(approved, function (u) { 
+      return u.name == user.name && u.pass == user.pass; 
+    });
+    if (found) return true;
+    else return false;
+  } catch(err) {
+    return false;
+  }
+}
+
+app.get('/editor/login', function (req,res,next) {
   var cookies = new Cookies(req, res);
-  var approved = require('./approved.json').approved;
-  var user = { name: cookies.get('uname'), pass: cookies.get('upass') };
-  var found = _.find(approved, function (u) { 
-    return u.name == user.name && u.pass == user.pass; 
-  });
-  if (found) next();
-  else res.send("NOT AUTHORIZED");
+  var token = cookies.get('token');
+  if (authorized(token)) res.send('Logged In');
+  else res.render('login', {});
 });
 
-app.get('/editorlogin', function (req,res,next) {
-  res.render('login', {}); // TODO, redirect if logged in
-});
-
-app.post('/editorlogin', multipartMiddleware, function( req, res, next ) {
+app.post('/editor/login', multipartMiddleware, function( req, res, next ) {
   var user = req.body;
   var approved = require('./approved.json').approved;
   var cookies = new Cookies(req, res);
@@ -209,8 +184,8 @@ app.post('/editorlogin', multipartMiddleware, function( req, res, next ) {
     return u.name == user.name && u.pass == user.pass; 
   });
   if (found) {
-    cookies.set('uname', user.name);
-    cookies.set('upass', user.pass);
+    var token = jwt.sign({ name: user.name, pass: user.pass }, secret);
+    cookies.set('token', token);
     res.status(200).send("Logged In");
   } else {
     res.status(200).send("You are not an approved editor");
@@ -219,9 +194,8 @@ app.post('/editorlogin', multipartMiddleware, function( req, res, next ) {
 
 app.get('/editor/logout', function( req, res, next ) {
   var cookies = new Cookies(req, res);
-  cookies.set('uname');
-  cookies.set('upass');
-  res.render('login', {});
+  cookies.set('token');
+  res.redirect('/editor/login');
 });
 
 app.get('/editor/newArticle', function (req, res) {
@@ -306,30 +280,40 @@ app.get('/editor/directory', function (req, res) {
 });
 
 
-
-var articlePutParams = function(id, article) {
+var articleGetParams = function(category, title) {
   return {
     TableName: 'articleTable',
-    Item: {
-      id: id,
-      title: article.title,
-      author: article.author,
-      category: article.category,
-      datePublished: article.date,
-      headerImg: article.headerImg,
-      urlTitle: linkify(article.title),
-      urlCategory: linkify(article.category),
-      urlAuthor: linkify(article.author)
+    Key:{
+      "urlCategory": category,
+      "urlTitle": title
     }
   };
-}
-function articlePut(id, article, callback) {
-  var params = articlePutParams(id, article);
-  docClient.put(params, function(err, data) {
-    if (err) { console.log("ERROR: " + err); }
-    else { callback(data); }
-  });
-}
+};
+var categoryGetParams = function(category) {
+  return {
+    TableName: 'articleTable',
+    KeyConditionExpression: "#cat = :category",
+    ExpressionAttributeNames:{
+      "#cat": "urlCategory"
+    },
+    ExpressionAttributeValues: {
+      ":category": category
+    }
+  };
+};
+var authorGetParams = function(author) {
+  return {
+    TableName: 'articleTable',
+    IndexName: 'urlAuthorIndex',
+    KeyConditionExpression: "#auth = :author",
+    ExpressionAttributeNames:{
+      "#auth": "urlAuthor"
+    },
+    ExpressionAttributeValues: {
+      ":author": author
+    }
+  };
+};
 
 // Router functions -------------------------------------------
 
@@ -349,15 +333,13 @@ function articlePut(id, article, callback) {
   */
 
 // S3 functions -------------------------------------------
-var txtStorage = 'clarionarticles';
-var imgStorage = 'clarionimgs';
 
 function s3ImgUpload(name, path, id, callback) {
   var imagePath = path;
   var imageName = id + "-" + name;
   var img = fs.readFileSync(imagePath);
   var params = {
-    Bucket: imgStorage, 
+    Bucket: 'clarionimgs', 
     Key: imageName, 
     Body: img,
     ContentType: img.mimetype,
@@ -457,7 +439,7 @@ function parseContent(id, content) {
   - image: [imagename.type]
   - hedaer: { header }
 
-*/
+  */
 
 
 

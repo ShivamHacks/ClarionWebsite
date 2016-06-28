@@ -1,3 +1,30 @@
-<h1><%= message %></h1>
-<h2><%= error.status %></h2>
-<pre><%= error.stack %></pre>
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Error</title>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+  	<script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+  	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+	<style>
+	.img-responsive {
+		margin: auto;
+	}
+	.error-lg {
+		font-size: 15em;
+	}
+	</style>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+</head>
+<body>
+
+	<% include ./partials/nav %>
+
+	<div class="container text-center">
+		<img class="img-responsive" src="http://hillel.rpi.edu/img/samples/404_Example1.jpg">
+		<span class="error-lg"><%= error.status %></span><br>
+		<h1><%= error.message %></h1>
+	</div>
+
+</body>
+</html>

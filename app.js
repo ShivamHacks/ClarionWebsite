@@ -13,6 +13,10 @@ app.listen(process.env.PORT || '3000', function () {
   console.log('Server started on port: ' + this.address().port);
 });
 
+app.locals.urlBase = 'localhost:3000';
+app.locals.siteName = 'The Clarion';
+app.locals.categories = [ 'News', 'Opinions', 'Entertainment', 'Features', 'Sports' ];
+
 // Libraries
 
 var multipart = require('connect-multiparty');
@@ -65,10 +69,7 @@ app.get('/article/:category/:title', function (req, res) {
           var body = buffer.toString('utf-8');
           article.content = parseContent(id, body);
 
-          res.render('article', {
-            article: article,
-            urlBase: "localhost:3000"
-          });
+          res.render('article', { article: article });
         }
       });
     }
@@ -76,15 +77,16 @@ app.get('/article/:category/:title', function (req, res) {
 });
 
 app.get('/category/:category', function (req, res) {
+  // need to sort by dateNum now
   var category = req.params.category;
   var params = categoryGetParams(category);
   docClient.query(params, function(err, data) {
     if (err) { res.json(err); } 
-    else { 
+    else {
+      var articles = sortByDate(data.Items, 'datePublished');
       res.render('articles_list', {
-        articles: data.Items,
-        category: category,
-        urlBase: "localhost:3000"
+        articles: articles,
+        category: category
       });
     }
   });
@@ -146,9 +148,10 @@ app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
   var empty = noNullVals(article);
   if (empty.length == 0) {
     var html = parseContent(id, article.content);
-    s3TxtUpload(id, article.content, html, function(done) {
+    s3TxtUpload(id, article.content, function(done) {
       if (done) {
         delete article.content;
+        article.dateNum = new Date(article.date).getTime();
         var params = articlePutParams(id, article);
         docClient.put(params, function(err, data) {
           if (err) { res.send("ERROR, couldn't save article to Database."); }
@@ -188,10 +191,7 @@ app.get('/editor/editArticle/:category/:title', function (req, res) {
           var body = buffer.toString('utf-8');
           article.content = body;
 
-          res.render('add_article', {
-            article: article,
-            urlBase: "localhost:3000"
-          });
+          res.render('add_article', { article: article });
         }
       });
     }
@@ -202,10 +202,7 @@ app.get('/editor/directory', function (req, res) {
   docClient.scan({ TableName: "articleTable" }, function(err, data) {
     if (err) { res.json(err); } 
     else {
-      res.render('directory', { 
-        urlBase: "http://localhost:3000",
-        articles: data.Items
-      });
+      res.render('directory', { articles: data.Items });
     }
   });
 });
@@ -221,6 +218,7 @@ var articlePutParams = function(id, article) {
      author: article.author,
      category: article.category,
      datePublished: article.date,
+     dateNum: article.dateNum,
      headerImg: article.headerImg,
      urlTitle: linkify(article.title),
      urlCategory: linkify(article.category),
@@ -228,7 +226,6 @@ var articlePutParams = function(id, article) {
    }
  };
 };
-
 var articleGetParams = function(category, title) {
   return {
     TableName: 'articleTable',
@@ -241,12 +238,9 @@ var articleGetParams = function(category, title) {
 var categoryGetParams = function(category) {
   return {
     TableName: 'articleTable',
-    KeyConditionExpression: "#cat = :category",
-    ExpressionAttributeNames:{
-      "#cat": "urlCategory"
-    },
+    KeyConditionExpression: "urlCategory = :category",
     ExpressionAttributeValues: {
-      ":category": category
+      ":category": category,
     }
   };
 };
@@ -323,6 +317,12 @@ function linkify(str) {
   return str.trim().replace(/\s+/g, '-').toLowerCase();
 }
 
+function sortByDate(data, attribute) {
+  return _.sortBy(data, function(item) {
+    return new Date(item[attribute]).getTime();
+  }).reverse();
+}
+
 function authorized(token) {
   try {
     var user = jwt.verify(token, secret);
@@ -338,6 +338,8 @@ function authorized(token) {
 }
 
 // Parser
+
+// TODO, add image caption
 
 parser.addRule(/\[(.*?)\]/, function(tag) {
   var src = "https://s3.amazonaws.com/clarionimgs/" + tag.replace(/[[\]]/g,'');
@@ -355,10 +357,16 @@ function parseContent(id, content) {
 
 // Finishing code
 
+app.use(function(req, res, next) {
+  var err = new Error('Not Found');
+  err.status = 404;
+  next(err);
+});
+
 app.use(function(err, req, res, next) {
   console.log(err);
   res.status(err.status || 500);
-  res.send("ERROR");
+  res.render('error', { error: err });
 });
 
 module.exports = app;
@@ -375,79 +383,3 @@ module.exports = app;
           // in callback, add type (error or not error)
           // TODO, limit to 10 order of closest date
 
-          /* Parser
-
-  - image: [imagename.type]
-  - header: { header }
-
-  */
-
-
-/*
-function generateSampleData() {
-  var authors = [ 'Shivam Agrawal', 'Dhruv Agrawal' ];
-  var categories = [ 'news', 'opinions', 'comedy' ];
-  var dateRange = [ 42536, 42546 ];
-  var Items = [];
-  for (var i = 0; i < 100; i++) {
-    var rand1 = Math.floor(Math.random() * (authors.length));
-    var rand2 = Math.floor(Math.random() * (categories.length));
-    var rand3 = Math.floor((Math.random() * (dateRange[1] - dateRange[0])) + dateRange[0]);
-    //console.log(rand1 + "," + rand2 + "," + rand3);
-    var author = authors[rand1];
-    var category = categories[rand2];
-    var datePublished = rand3 + "";
-    var title = "Title " + i;
-    Items.push({
-      "urlCategory": { "S": category.replace(/\s+/g, '-').toLowerCase() },
-      "urlTitle": { "S": title.replace(/\s+/g, '-').toLowerCase() },
-      "urlAuthor": { "S": author.replace(/\s+/g, '-').toLowerCase() },
-      "category": { "S": category },
-      "title": { "S": title },
-      "datePublished": { "N": datePublished },
-      "author": { "S": author }
-    });
-  }
-  loadSampleData(Items);
-  //console.log(Items);
-}
-
-function loadSampleData(Items) {
-  Items.forEach(function(Item) {
-    var params = {
-      TableName: "articleTable",
-      Item: Item
-    };
-    db.putItem(params, function(err, data) {
-     if (err) { console.log(err); }
-     else { console.log("Item putted"); }
-   });
-  });
-}
-//generateSampleData();
-
-
-// check back on this!
-app.get('/author/:author', function (req, res) {
-  var author = req.params.author;
-  var params = categoryGetParams(author);
-  docClient.query(params, function(err, data) {
-    if (err) { res.json(err); } 
-    else { res.json(data); }
-  });
-});
-
-var authorGetParams = function(author) {
-  return {
-    TableName: 'articleTable',
-    IndexName: 'urlAuthorIndex',
-    KeyConditionExpression: "#auth = :author",
-    ExpressionAttributeNames:{
-      "#auth": "urlAuthor"
-    },
-    ExpressionAttributeValues: {
-      ":author": author
-    }
-  };
-};
-*/

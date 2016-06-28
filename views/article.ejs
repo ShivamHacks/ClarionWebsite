@@ -7,7 +7,7 @@
   <!-- add other fancy footer stuff -->
   <link rel='stylesheet' type='text/css' href='https://fonts.googleapis.com/css?family=Open Sans'>
   <link rel='stylesheet' type='text/css' href='https://fonts.googleapis.com/css?family=Lato'>
-  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
   <style>
   html, body {
     font-family: 'Open Sans';
@@ -49,10 +49,6 @@
     height: calc(10vh);
     width: calc(100vw);
   }
-  .navbar {
-    margin-bottom: 0;
-    border-radius: 0;
-  }
   </style>
 
   <meta charset="UTF-8">
@@ -63,6 +59,8 @@
 
 </head>
 <body>
+
+  <% include ./partials/nav %>
 
   <div id="heading">
     <h1><%= article.title %></h1>
@@ -92,6 +90,9 @@
   </div>
 
   <div class="buffer"></div>
+
+  <script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
 
 </body>
 </html>

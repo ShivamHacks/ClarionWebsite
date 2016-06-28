@@ -54,6 +54,7 @@ app.get('/article/:category/:title', function (req, res) {
       var article = data.Item;
       article.headerImg = "https://s3.amazonaws.com/clarionimgs/" + article.id + "-" + article.headerImg;
       var params = { Bucket: 'clarionarticles', Key: article.id };
+      console.log(params);
       s3.getObject(params, function(err, data) {
         if (err) { 
           console.log(err, err.stack);
@@ -62,6 +63,7 @@ app.get('/article/:category/:title', function (req, res) {
         else {
           var buffer = new Buffer(data.Body);
           var body = buffer.toString('utf-8');
+          article.content = JSON.parse(body).formatted;
 
           res.render('article', {
             article: article,
@@ -145,12 +147,12 @@ app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
     var html = parseContent(id, article.content);
     s3TxtUpload(id, article.content, html);
     delete article.content;
-    articlePut(id, article, function(data) {
-      res.redirect('/article/' + linkify(article.category) + '/' + linkify(article.title));
+    var params = articlePutParams(id, article);
+    docClient.put(params, function(err, data) {
+      if (err) { res.send("ERROR"); }
+      else { res.redirect('/article/' + linkify(article.category) + '/' + linkify(article.title)); }
     });
-  } else {
-    res.send("ERROR");
-  }
+  } else { res.send("ERROR"); }
 });
 
 app.post('/editor/upload/:id', upload.single('file'), function( req, res, next ) {
@@ -206,6 +208,23 @@ app.get('/editor/directory', function (req, res) {
 });
 
 // DB params
+
+var articlePutParams = function(id, article) {
+ return {
+   TableName: 'articleTable',
+   Item: {
+     id: id,
+     title: article.title,
+     author: article.author,
+     category: article.category,
+     datePublished: article.date,
+     headerImg: article.headerImg,
+     urlTitle: linkify(article.title),
+     urlCategory: linkify(article.category),
+     urlAuthor: linkify(article.author)
+   }
+ };
+};
 
 var articleGetParams = function(category, title) {
   return {
@@ -372,7 +391,7 @@ module.exports = app;
   - image: [imagename.type]
   - header: { header }
 
-*/
+  */
 
 
 /*

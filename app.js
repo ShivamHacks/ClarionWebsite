@@ -337,13 +337,14 @@ function authorized(token) {
   }
 }
 
+
+
 // Parser
 
-// TODO, add image caption
-
 parser.addRule(/\[(.*?)\]/, function(tag) {
-  var src = "https://s3.amazonaws.com/clarionimgs/" + tag.replace(/[[\]]/g,'');
-  return "<br><img class='img-responsive' src='" + src + "'><br>";
+  var data = tag.replace(/[[\]]/g,'').split(',');
+  var src = "https://s3.amazonaws.com/clarionimgs/" + data[0].trim();
+  return "<br><figure><img class='img-responsive' src='" + src + "'><figcaption>" + data[1].trim() + "</figcaption></figure><br>";
 });
 parser.addRule(/\{(.*?)\}/, function(tag) {
   return "<h2>" + tag.replace(/[{}]/g,'').trim() + "</h2>";
@@ -367,6 +368,11 @@ app.use(function(err, req, res, next) {
   console.log(err);
   res.status(err.status || 500);
   res.render('error', { error: err });
+});
+
+app.get('/textfunc', function (req, res) {
+  // here, test any function that must occur after app has loaded
+  //res.send(parseContent('rkB-rOlU', ' [ background1.jpg, blag blag ]'));
 });
 
 module.exports = app;

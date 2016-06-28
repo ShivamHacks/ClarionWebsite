@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Title</title>
+  <title>Articles in <%= category %></title>
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
 
   <style>
@@ -33,25 +33,29 @@
     <div class="row">
       <div class="col-lg-4 col-sm-2"></div>
       <div class="col-lg-4 col-sm-8 col-xs-12">
+        <% if( articles.length == 0 ) { %>
+        <h1>No articles found in <%= category %></h1>
+        <% } else { %>  
         <% for (var i = 0; i < articles.length; i++) { %>
         <div class="row article">
           <% if( null != articles[i].headerImg ) { %>
-          <img class="img-fit" src=https://s3.amazonaws.com/clarionimgs/<%= articles[i].id %>-<%= articles[i].headerImg %> alt=<%= articles[i].urlTitle %>>
+          <img class="img-fit" src="https://s3.amazonaws.com/clarionimgs/<%= articles[i].id %>-<%= articles[i].headerImg %>" alt="<%= articles[i].urlTitle %>">
           <% } else { %>  
           <img class="img-fit" src="http://theccat.com/wp-content/themes/gonzo/images/no-image-featured-image.png">
           <% } %>
           <div class="col-xs-8">
             <span>
               <b>
-                <a target="_blank" href=<%= urlBase %>/article/<%= articles[i].urlCategory %>/<%= articles[i].urlTitle %>><%= articles[i].title %></a>
+                <a target="_blank" href="<%= urlBase %>/article/<%= articles[i].urlCategory %>/<%= articles[i].urlTitle %>"><%= articles[i].title %></a>
               </b>
             </span><br>
             <span><%= articles[i].datePublished %></span>
           </div>
           <div class="col-xs-4">
-            <span><a target="_blank" href=<%= urlBase %>/author/<%= articles[i].urlAuthor %>><%= articles[i].author %></a></span>
+            <span><%= articles[i].author %></span>
           </div>
         </div><br>
+        <% } %>
         <% } %>
       </div>
     </div>

@@ -52,9 +52,9 @@ app.get('/article/:category/:title', function (req, res) {
     if (err) { res.json(err); } 
     else {
       var article = data.Item;
-      article.headerImg = "https://s3.amazonaws.com/clarionimgs/" + article.id + "-" + article.headerImg;
-      var params = { Bucket: 'clarionarticles', Key: article.id };
-      console.log(params);
+      var id = article.id;
+      article.headerImg = "https://s3.amazonaws.com/clarionimgs/" + id + "-" + article.headerImg;
+      var params = { Bucket: 'clarionarticles', Key: id };
       s3.getObject(params, function(err, data) {
         if (err) { 
           console.log(err, err.stack);
@@ -63,7 +63,7 @@ app.get('/article/:category/:title', function (req, res) {
         else {
           var buffer = new Buffer(data.Body);
           var body = buffer.toString('utf-8');
-          article.content = JSON.parse(body).formatted;
+          article.content = parseContent(id, body);
 
           res.render('article', {
             article: article,
@@ -83,6 +83,7 @@ app.get('/category/:category', function (req, res) {
     else { 
       res.render('articles_list', {
         articles: data.Items,
+        category: category,
         urlBase: "localhost:3000"
       });
     }
@@ -145,19 +146,21 @@ app.post('/editor/newArticle/:id', multipartMiddleware, function (req, res) {
   var empty = noNullVals(article);
   if (empty.length == 0) {
     var html = parseContent(id, article.content);
-    s3TxtUpload(id, article.content, html);
-    delete article.content;
-    var params = articlePutParams(id, article);
-    docClient.put(params, function(err, data) {
-      if (err) { res.send("ERROR"); }
-      else { res.redirect('/article/' + linkify(article.category) + '/' + linkify(article.title)); }
+    s3TxtUpload(id, article.content, html, function(done) {
+      if (done) {
+        delete article.content;
+        var params = articlePutParams(id, article);
+        docClient.put(params, function(err, data) {
+          if (err) { res.send("ERROR, couldn't save article to Database."); }
+          else { res.redirect('/article/' + linkify(article.category) + '/' + linkify(article.title)); }
+        });
+      } else { res.send("ERROR, couldn't save article body."); }
     });
-  } else { res.send("ERROR"); }
+  } else { res.send("ERROR, empty values for the article."); }
 });
 
 app.post('/editor/upload/:id', upload.single('file'), function( req, res, next ) {
   var id = req.params.id;
-  console.log("FILE UPLOAD: " + id);
   var name = req.file.originalname;
   var path = req.file.path;
   if (req.file.mimetype.indexOf("image/") > -1) {
@@ -183,7 +186,7 @@ app.get('/editor/editArticle/:category/:title', function (req, res) {
         else {
           var buffer = new Buffer(data.Body);
           var body = buffer.toString('utf-8');
-          article.content = JSON.parse(body).original;
+          article.content = body;
 
           res.render('add_article', {
             article: article,
@@ -247,19 +250,6 @@ var categoryGetParams = function(category) {
     }
   };
 };
-var authorGetParams = function(author) {
-  return {
-    TableName: 'articleTable',
-    IndexName: 'urlAuthorIndex',
-    KeyConditionExpression: "#auth = :author",
-    ExpressionAttributeNames:{
-      "#auth": "urlAuthor"
-    },
-    ExpressionAttributeValues: {
-      ":author": author
-    }
-  };
-};
 
 // S3 Functions
 
@@ -283,11 +273,7 @@ function s3ImgUpload(name, path, id, callback) {
   });
 }
 
-function s3TxtUpload(id, txtContent, htmlContent) {
-  var content = JSON.stringify({
-    original: txtContent,
-    formatted: htmlContent
-  });
+function s3TxtUpload(id, content, callback) {
   var params = {
     Bucket: 'clarionarticles', 
     Key: id, 
@@ -296,8 +282,11 @@ function s3TxtUpload(id, txtContent, htmlContent) {
     ACL: 'public-read'
   };
   s3.upload(params, function(err, data) {
-    if (err) {  console.log(err); }
-    else {  }
+    if (err) {
+      console.log(err);
+      callback(false);
+    }
+    else { callback(true); }
   });
 }
 
@@ -364,7 +353,7 @@ function parseContent(id, content) {
   return html;
 }
 
-// Final code
+// Finishing code
 
 app.use(function(err, req, res, next) {
   console.log(err);
@@ -447,4 +436,18 @@ app.get('/author/:author', function (req, res) {
     else { res.json(data); }
   });
 });
+
+var authorGetParams = function(author) {
+  return {
+    TableName: 'articleTable',
+    IndexName: 'urlAuthorIndex',
+    KeyConditionExpression: "#auth = :author",
+    ExpressionAttributeNames:{
+      "#auth": "urlAuthor"
+    },
+    ExpressionAttributeValues: {
+      ":author": author
+    }
+  };
+};
 */
